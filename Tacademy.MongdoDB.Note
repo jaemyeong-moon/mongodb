@@ -1,0 +1,249 @@
+1. 
+NOSQL --> JSON 형식의 데이터를 행과 열 구분 없이(테이블과 달리) 하나의 컬렉션에 저장 할 수 있음.
+저장할 때마다 _ID 라는 값이 자동으로 생성되게 됨. 이 ID를 가지고 각 데이터를 구분함 .
+데이터는 중복으로 저장될 수 있음 (_ID는 당연히 다르지)
+
+2.
+db.[Collection name].함수명() 으로 CRUD 할수있음. 
+
+CRUD 각 명령어는 
+save(),insert() = CREATE
+find() = READ
+update() = UPDATE
+remove() = DELETE
+
+각 함수에 파라메타를 줘서 Query 처럼 사용함. 
+파라메타는 반드시 JSON 형식으로. 
+
+3.
+연산자
+
+논리 연산자 
+$or
+$and
+$not
+$nor
+
+논리연산자의 value 자리에는 항상 배열이 있어야 함. 배열 = 조건이 됨.
+
+비교 연산자
+$gt 
+$gte
+$lt
+$lte
+$in
+$nin
+$ne
+== 은 {key:x} 와 같이 쓸수 있음
+
+각 사용법은 아래를 참고.
+
+4. 몽고 디비 메뉴얼 페이지
+https://docs.mongodb.com/manual/reference/
+
+
+5. 예제
+
+유저라는 컬렉션에서  6<=pos<=27 또는 77<pos<=90 인 경우를 검색하는 문제. 
+db.users.find({'$or':[{'$and':[{pos:{$gte:6}},{pos:{$lte:27}}]},{'$and':[{pos:{$gt:77}},{pos:{$lte:90}}]} ]});
+
+
+
+6. index : 디비의 검색을 빠르게 하기 위해 미리 데이터의 순서를 정리해두는 과정 
+index를 잘 설계해야 효율을 최대로 끌어올릴 수 있음!!
+Mongodb = B-tree Index 
+
+몽고DB는 램에 데이터를 적재후 데이터를 파일에 쓰는 방식. 
+디스크에서 데이터를 액세스 해야하는 경우를 "쓰레싱(thrashing)" 이라 일컫는다. 
+
+콜렉션당 최대 64개의 인덱스를 가지도록 제한. 
+보통 2~3개 정도만 가지는 것이 좋음. 
+인덱스는 데이터가 변경되면 컬렉션 내부의 모든 인덱스를 갱신함--> 안좋음! 
+
+인덱스의 사용
+
+db.users.getIndexes()
+db.users.ensureIndex({"name":1}) --> 인덱스를 생성. 1이면 오름차순, -1 이면 내림차순. 
+db.users.ensureIndex({"name":1},{background : true}) --> 인덱스를 생성. 1이면 오름차순, -1 이면 내림차순. background 옵션 --> 인덱싱하는 과정을 백그라운드로 동작하도록함. 
+db.users.ensureIndex({"name":1},{unique : true}) --> 인덱스를 생성. 1이면 오름차순, -1 이면 내림차순. unique -> 중복데이터를 저장하지 못하도록 함. 
+db.users.ensureIndex({"name":1},{unique : true, dropDups:true}) --> 인덱스를 생성. 1이면 오름차순, -1 이면 내림차순. unique -> 중복데이터 삭제 //drop duplications. --> 기존 컬렉션에 중복데이터가 있을경우에 이걸 써야함. 아니면 인덱스 추가 안됨. 
+db.users.dropIndex({"name":1}) --> 인덱스 삭제
+db.users.dropIndexes() --> 모든 인덱스 삭제 
+
+db.person.find({name:"user5000"}).explain("executionStats") --> 검색 응답속도 확인. 
+
+
+7. 샤딩
+데이터를 분산하여 저장하는 것. 
+데이터 유실 가능성으로부터 보호 할 수 있음. 시스템 성능 향상
+
+개발자 - 브로커 - 샤드1/샤드2/샤드3...  
+
+샤드키는 카디널리티가 높을수록 좋다. 
+샤드키는 샤드서버가 여러개로 분할될 때 기준필드를 가르킨다. 
+이 키는 성능에 절대적 영향을 미친다. 
+Cardinality = 데이터 분포가 넓으면  Cardinality가 높다. ex) 사원번호와 같이 고유한 키는 카드널리티가 높다/ 남자,여자와같이 범위가 작은건 카드널리티가 낮다. 
+
+Migration(마이그레이션) = 데이터의 이동, 서버에 균등하게 데이터를 재조정하는 과정
+Chunk = 데이터 분할 단위 
+Chunk 크기는 기본적으로 64MB 이지만, 더 큰 크기를 갖는것도 가능하다.
+빈번하게 마이크레이션이 발생한다면, Chunk 크기를 더욱 크게 설정한다. --> 효율을 위해. 
+
+
+한 청크에 저장될수 있는 BSON 객채 수는 250,000개 
+한 청크에 설정할 수 있는 분할 지점의 최대 개수는 8192개
+몽고디비로 설정할 수 있는 샤드 노드의 개수는 1000개가 목표..? 현재는 몇갠지.. (강의 기준 100개)
+
+
+8. 샤드 서버 구축 
+샤드 서버에 저장공간을 만든다. 
+최신버전의 경우 강의랑 다르네... 
+
+실행 : Mongod -shardsvr -replSet hello -dbpath D:\DBExample\shard2\ -port 40002  -->샤드, 여러개 실행될수 있음. 
+     Mongod -configsvr -replSet hello -dbpath D:\DBExample\config1\ -port 50001  -->컨피그
+      Mongos -configdb hello/localhost:50001 -port 50000 --> 중개자.  helloworld는 Repleca Name 이다. 복제이름..정도? 
+    replSet으로 설정한 이름이 같아야 한다? 아마도.. 
+    configsvr로 동작하는 것중 아무것도 replSet 이름이 일치하지 않는다면, mongos 로 실행되는 서버에 접속되지 않는다... 
+
+    
+
+https://docs.mongodb.com/manual/tutorial/deploy-shard-cluster/ 페이지를 참조.  
+
+실패..?  ㅇㅇ 실패.
+샤딩을 구성하는건 어렵다 ㅎㅎ.. 
+
+
+9. 복제
+같은 데이터를 갖는 여러개의 몽고디비를 설계 
+
+마스터-슬레이브로 존재하며, 상위로부터 받은 데이터를 저장하는 마스터 mongod의 oplog와 슬레이브로 지정된 oplog 가 명령을 수행하여 슬레이브의 db에 데이터를 복제함. 
+근데 4.4.3버전에서는 지원안하는 기능 같은데... 
+"Master/slave replication is no longer supported" 뜸.
+
+
+10. 리플리카셋
+프라이머리서버 - 우두머리
+세컨더리 서버 - 쫄따구
+프라이머리는 세컨더리 서버를 2초단위로 상태체크함. 
+프라이머리가 죽으면-> 세컨더리가 대신 
+세컨더리 죽으면 -> 복구될때까지 프라이머리가 기다렸다가, 세컨더리가 복구되면 자동 동기화(oplog를 통해)
+복제집합은 최대 12개
+복제집합에서 투표할수있는 노드는 7개
+마스터가 죽었을 때 투표를통해 새로운 마스터를 지정 
+
+마스터가 죽고나서 다시 복구된다 하더라도, 이미 프라이머리로 설정된놈의 세컨더리로 복구가된다. 
+
+
+11. MapReduce 
+대용량의 데이터를 안전하고 빠르게 처리학 ㅣ위한 방법 
+한대 이상의 하드웨어를 사용하는 분산처리 방식 
+
+ 
+
+12. Word Count / MapReduce를 통한 Word Count 
+Word Count - 입력 파일의 텍스트 내용에 포함된 단어의 수를 세는 프로그램 
+MapReduce 프로그래밍 예제 
+Hadoop / mongodb 공통 예제 ㅎㅎ 
+
+MongoDB Enterprise > map = function(){ var res = this.text.split(" "); for(var i in res){key = {word:res[i]}; value = {count:1}; emit(key,value);} }
+MongoDB Enterprise > reduce = function(key,values) { var totalcount = 0; for (var i in values){ totalcount = values[i].count + totalcount; } return {count : totalcount}; }
+MongoDB Enterprise > db.words.mapReduce(map,reduce,"wordcount");
+{ "result" : "wordcount", "ok" : 1 }
+MongoDB Enterprise > db.wordcount.find() 
+{ "_id" : { "word" : "write" }, "value" : { "count" : 1 } }
+{ "_id" : { "word" : "a" }, "value" : { "count" : 2 } }
+{ "_id" : { "word" : "read" }, "value" : { "count" : 1 } }
+{ "_id" : { "word" : "book" }, "value" : { "count" : 2 } }
+
+13. Inverted Search Index 
+검색 엔진에서 많이 사용하는 방법. 
+URL 에서 특정 단어들을 저장할 때 URL=Key / 단어 = value로 저장함 (당연하게)
+근데 이렇게 저장된 단어들을 검색 할 때, 단어를 검색하기에는 key가 URL이라서 단어를 찾기위해 모든 키를 뒤져봐야함
+그래서 key=단어 / value = URL 로 바꿔서 검색하도록 함. 
+위 방법을 일컬어 Inverted(Invert = 뒤집다,도치시키다.) Searched Index라고 한다. 
+
+
+14. 집계함수 
+count() : 컬렉션 내 다큐먼트의 갯수를 조회 = RDBMS의 Count 와 같은 기능. 
+db.person.count()
+db.person.find({ name : "moon"}).count() : 이름이 moon인 다큐먼트의 갯수
+
+distinct : 지정된 키에 대한 중복제거 ( 키를 반드시 지정해야 함. )
+db.phones.distnct({key:'age'})
+
+
+group : 지정된 키에 대한 그룹핑 
+속도가 느리기 때문에 필요할 때만 사용. 
+*샤드 클러스터 환경에서는 동작하지 않음
+db.person.group ( {key:{age:1}, initial: {count : 0}, reduce: function(obj,prev){prev.count++;}}) : age = 1 이고 count의 초기값은 0, function을 통해 count 값 증가. 
+ -->  age가 1인 다큐먼트의 갯수를 구하는 예...
+
+시간복잡도 순위 : group() < aggregation(집계) framework < map/reduce
+
+샤드를 통해 데이터를 저장하고, Aggregation framework를 통해 분석. 
+
+
+Aggregation framework : pipelines : unix 와 동일, 다큐먼트를 stream 화 
+pipelines 주요 명령어
+{
+  $project : SELECT 
+  $match  : WHERE
+  $group : GROUP BY
+  $sort : ORDER BY
+  $limit :
+  $skip : 
+  $unwind : 
+  $geoNear : 
+} 
+
+Aggregation은 샤딩 기반에서 수행 한다. 
+
+예제 : 잡지 기사 콜렉션에서 가장 많은 기사를 쓴 기자를 찾기
+ 1. 각 기사 문서의 기자를 선출한다. 
+ 2. 이름으로 기자를 묶고 그룹내에서 나타난 횟수를 센다
+ 3. 나타난 횟수를 기준으로 기자를 내림차순 정렬한다. 
+ 4. 처음 다섯개로 결과를 제한한다.
+  = db.articlesaggregate( {"$project":{"author":1}}, {"$group":{_id:"$author", "count}:{"$sum":1}}}, {"$sort":{"count}:-1}}, {"$limit":5} )
+
+예제2 전화번호부에서 중복지우기.
+populatePhones = function(area,start,stop) { for(var i = start; i < stop; i++){ var country = 1 + ((Math.random()*8) << 0); var num = (country * 1e10) + (area * 1e7) + i; db.phones.insert({_id:num, components:{country:country, area:area, prefix:(i*1e4) <<0, number:i}, display:'+'+country+' '+area+'-'+i}); } }
+function(area,start,stop) { for(var i = start; i < stop; i++){ var country = 1 + ((Math.random()*8) << 0); var num = (country * 1e10) + (area * 1e7) + i; db.phones.insert({_id:num, components:{country:country, area:area, prefix:(i*1e4) <<0, number:i}, display:'+'+country+' '+area+'-'+i}); } }
+MongoDB Enterprise > populatePhones(800,5550000,5650000)
+MongoDB Enterprise > db.phones.find().limit(2)                                                                                                                                                                                                                                                                                            
+{ "_id" : 28005550000, "components" : { "country" : 2, "area" : 800, "prefix" : -334574848, "number" : 5550000 }, "display" : "+2 800-5550000" }
+{ "_id" : 78005550001, "components" : { "country" : 7, "area" : 800, "prefix" : -334564848, "number" : 5550001 }, "display" : "+7 800-5550001" }
+MongoDB Enterprise > db.phones.ensureIndex({display:1},{unique:true, dropDups:true})
+{
+        "createdCollectionAutomatically" : false,
+        "numIndexesBefore" : 1,
+        "numIndexesAfter" : 2,
+        "ok" : 1
+}
+MongoDB Enterprise > db.phones.count({'components.number':{$gt:5599999}})
+50000
+MongoDB Enterprise > populatePhones(855,5550000,5650000)
+MongoDB Enterprise > db.phones.count({'components.number':{$gt:5599999}})
+100000
+MongoDB Enterprise > db.phones.distinct('components.number',{'components.number':{$lt:5550005}})
+[ 5550000, 5550001, 5550002, 5550003, 5550004 ]
+
+db.phones.aggregate([ {$group:{ "_id":'$components.area', "count":{$sum : {$cond :{ if: { $gt:["$components.number",5599999]},then:1,else:0}}}}}] )  
+각 지역에서 번호가 5599999 이상인 것 뽑기 .
+강의 버전과는 달라서 문서참고함.  https://docs.mongodb.com/manual/reference/operator/aggregation/cond/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
