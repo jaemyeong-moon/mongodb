@@ -234,6 +234,92 @@ db.phones.aggregate([ {$group:{ "_id":'$components.area', "count":{$sum : {$cond
 
 
 
+15. 데이터 백업/복구 종류 
+가장 기초적인 백업 방법 : ShutDown & file copy, 서비스를 종료하고 파일을 복사함.
+FSyncLock & backup : 데이터베이스에 락을 걸고 데이터를 복제하는 것. 
+- 데이터의 유입/변경/삭제 등을 차단할 수 있어 데이터 무결성 이슈에서 자유로움 
+- 몽고디비의 Clone Database 기능을 활용하면 remote 상의 데이터도 똑같은 데이터베이스 구조로 복제가 가능. 
+- 복구가 끝난 후 언락을 반드시 해주어야 서비스가 다시 정상서비스됨. 
+MongoDump, MongoRestore : 가장 흔하게 사용하는 백업 방법
+- MongoDB내의 데이터를 컬렉션, 데이터베이스, 전체 데이터 단위로 백업이 가능
+- 백업되는 데이터는 BSON 형태로 저장되어 문자열 형태로 저장된 데이터보다 더 빠르게 백업과 복구가 가능
+-백업된 데이터는 mongorestore 명령으로 복구 가능. 
+MongoExport, MongoImport : MongoDump, MongoRestore 와의 차이점 == 데이터 저장 형태가 json, csv(콤마로 데이터 구분), tsv(탭으로 데이터구분) 형태로 백업 가능. 
+- 덤프/리스토어보다 느리지만, 마이그레이션할 때 외부 툴의 도움을 받기 위해 데이터 저장형태를 .. 
+
+Primary, Secondary & Replica 등으로도 가능하다. 
+단, 쿼리 명령어를 통해 유실된 데이터는 복구가 힘들다.
+
+Snapshot 백업 : 메모리상에 저장한뒤 디스크에 데이터를 저장함. 
+
+*4.4에서 copyDatabase(), cloneDatabase는 삭제됨. 
+https://docs.mongodb.com/manual/release-notes/4.2-compatibility/#remove-support-for-the-copydb-and-clone-commands 참고 
+
+mongodump/restore 등등의 기능들은 mongodb tools 를 다운받아야 사용가능하다.
+4.4버전부터 tools/mongodb가 분리됨.
+
+
+mongodump -h 127.0.0.1, mongorestore -h 127.0.0.1 ./dump/
+mongoexport -h (ip) -c (collection) -d (db) -o (output Path), mongoimport -d (db) -c (collection) --type json --file (LoadfilePath) 
+
+
+
+16. 모니터링 전략 
+데이터베이스 활동을 실시간 리포팅하는 유틸리티 활용 
+데이터베이스 명령 활용 
+MMS(Mongodb Management Service) 모니터링 서비스 활용 : 데이터에 대한 시각화 및 경고등을 제공하는 무료 서비스 . 
+
+MongoStat : MongoDB가 동작하는 내부상황에 대한 정보를 확인하기 위한 툴 
+- 1초에 한번씩 mongod, mongos 성능을 측정 
+- 커맨드라인에서 Mongostat 입력. 
+- -rowcount x 를 통해 출력될 정보 수를 지정함. x를 지정하지 않으면, 계속 출력. 
+- MongoStat 의 값 의미 
+  *insert : 초당 Insert 수
+  *query : 초당 query 수
+  *update : 초당 update수
+  *delete : 초당 delete수
+  *getmore : 초당 발생 작업수
+  *command : Slave를 포함하여 초당 실행되는 명령어 수
+  *flushe : 초당 flushe수
+  *mapped : 메모리상 매핑되는 메모리 크기 (MB)
+  *vsize : 프로세스의 가상크기 (MB)
+  *res : 프로세스의 resident 크기 (MB)
+  *faults : 초당 발생하는 페이지 폴트 수 
+  *locked : 글로벌 Write 락이 발생하는 전체시간에 대한 비율 (%)
+  *Idx miss : Btree index를 로드하며 인덱스를 읽을 떄 페이지 폴트가 나는 비율 (%)
+  *qr : 몽고디비 인스턴스로 부터 data읽기를 기다릭 ㅣ위한 client의 queue 길이 
+  *qw : 몽고디비 인스턴스로부터 Data 쓰기를 기다리는 Client Queue 길이
+  *ar : 읽기 작업을 수행중인 Active 클라이언트 수
+  *aw : 쓰기 작업을 진행중인 Active 클라이언트 수
+  *netIn : 몽고디비로 received된 네트워크 트래픽 양
+  *netOut : 몽고디비에서 밖으로 sent된 네트워크 트래픽 양
+  *conn : 접속된 커넥션 수
+  *set : Replica 이름
+  *repl : 리플리케이션 유형 (M : Master | Sec : Secondary | REC : Recovering | UNK : Unknown | SLV : Slave)
+*page fault, qr, locked 가 가장 중요한 지표 *
+Page fault가 증가하고 서비스가 지연된다면, full scan 쿼리를 날렸을 가능성 높음 
+쓰기 요청이 많아질 경우 qr 수치가 높아지고 그만큼 읽기 대기 중인 상태가 많아지므로 체감상 서비스가 지연된다고 느낄 수 있음.
+
+MongoTop : 컬렉션 단위의 MongoStat, 디비 내 컬렉션의 read/write에 대한 내용 확인 가능 
+- mongotop (t) t초마다 Refresh 
+- MongoTop의 값 의미 
+  *NS : 데이터베이스명 + 컬렉션 명 
+  *DB : 데이터베이스명
+  *Total : Mongod프로세스가 해당 콜렉션에서  수행한 작업 총 시간 
+  *Read : Mongod프로세스가 해당 콜렉션에서 읽기 작업을 수행한 총 시간 
+  *Write : Mongod프로세스가 해당 콜렉션에서 쓰기 작업을 수행한 총 시간  
+  *시간 : 분석 결과를 반환한 시간
+
+웹 모니터링 도구 
+mongod 실행시 --rest 옵션을 주면 됨. --> 4.4에서 없음. 
+https://docs.mongodb.com/manual/reference/configuration-options/
+
+
+로그수집/분석
+mongod -dbpath (path) -logpath (path)
+
+
+
 
 
 
